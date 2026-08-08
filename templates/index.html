@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker Image Security Scanner - Analyze & Audit Docker Containers</title>
+  <meta name="description" content="A beginner-friendly Docker image security analyzer. Inspect Docker containers for root execution, exposed ports, unpinned tags, and hardcoded secrets.">
+  
+  <!-- Google Fonts & Font Awesome Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="container nav-content">
+      <a href="/" class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="brand-title">Docker <span>SecScan</span></div>
+      </a>
+      
+      <!-- Docker Daemon Status Indicator -->
+      <div class="status-badge" title="Docker Daemon Connection Status">
+        {% if is_docker_connected %}
+          <span class="status-dot online"></span>
+          <span>Docker Engine Connected</span>
+        {% else %}
+          <span class="status-dot offline"></span>
+          <span>Offline / Demo Mode</span>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <main class="container">
+    <section class="hero">
+      <span class="hero-tag"><i class="fa-solid fa-graduation-cap"></i> Educational Security Tool</span>
+      <h1 class="hero-title">Docker Image Security Scanner</h1>
+      <p class="hero-subtitle">
+        Analyze Docker container images for common security misconfigurations, audit permissions, detect exposed ports, find hardcoded secrets, and compute an actionable security risk score.
+      </p>
+
+      <!-- Error / Flash Alerts -->
+      {% if error_message %}
+        <div class="alert alert-error">
+          <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
+          <div>
+            <strong>Scan Error:</strong> {{ error_message }}
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Scan Form Card -->
+      <div class="scan-card">
+        <form action="/scan" method="POST" class="scan-form" id="scanForm">
+          <div class="scan-form-row">
+            <div class="input-wrapper">
+              <i class="fa-brands fa-docker input-icon"></i>
+              <input 
+                type="text" 
+                name="image_name" 
+                id="image_name" 
+                class="scan-input" 
+                placeholder="Enter Docker image (e.g. nginx:latest, python:3.9-slim)" 
+                required 
+                autocomplete="off"
+                value="{{ default_image or '' }}"
+              >
+            </div>
+            <button type="submit" class="btn-scan" id="scanBtn">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <span>Scan Image</span>
+            </button>
+          </div>
+
+          <!-- Quick Options & Presets -->
+          <div class="form-options">
+            <label class="checkbox-label" title="Pull latest image version from Docker Hub if available">
+              <input type="checkbox" name="force_pull" value="true">
+              <span>Force pull latest image from registry</span>
+            </label>
+            
+            {% if not is_docker_connected %}
+              <span style="color: var(--risk-medium); font-size: 0.82rem;">
+                <i class="fa-solid fa-circle-info"></i> Docker Engine offline — will use simulated analysis data
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Quick Select Tag Chips -->
+          <div class="quick-tags">
+            <span class="quick-title">Quick Try:</span>
+            <button type="button" class="tag-btn" onclick="fillImage('nginx:latest')">nginx:latest</button>
+            <button type="button" class="tag-btn" onclick="fillImage('python:3.9-slim')">python:3.9-slim</button>
+            <button type="button" class="tag-btn" onclick="fillImage('alpine:3.18')">alpine:3.18</button>
+            <button type="button" class="tag-btn" onclick="fillImage('vulnerable-app:latest')">vulnerable-app:latest</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Educational Security Checks Overview -->
+    <section>
+      <h2 style="text-align: center; margin-bottom: 2rem; font-weight: 700; font-size: 1.6rem;">
+        What Security Checks Are Performed?
+      </h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-user-shield"></i></div>
+          <h3 class="feature-title">1. Root User Execution</h3>
+          <p class="feature-desc">
+            Inspects <code>Config.User</code> to flag containers running as UID 0 (root). Running processes as root increases vulnerability blast radius during container escapes.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-network-wired"></i></div>
+          <h3 class="feature-title">2. Exposed & Risky Ports</h3>
+          <p class="feature-desc">
+            Analyzes <code>Config.ExposedPorts</code> to identify risky administrative or database endpoints (e.g., SSH 22, Telnet 23, MongoDB 27017, Redis 6379) exposed to public networks.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-tags"></i></div>
+          <h3 class="feature-title">3. Base Image & Tag Policy</h3>
+          <p class="feature-desc">
+            Evaluates image release tags. Warns against non-deterministic tags like <code>:latest</code> or <code>:dev</code> that break build reproducibility and introduce unvetted updates.
+          </p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fa-solid fa-key"></i></div>
+          <h3 class="feature-title">4. Hardcoded Secrets Scan</h3>
+          <p class="feature-desc">
+            Scans environment variables (<code>Config.Env</code>) and layer command history for sensitive keyword patterns like passwords, API keys, tokens, and AWS credentials.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Docker Image Security Scanner &bull; Educational Academic Project &bull; Powered by Flask & Docker SDK</p>
+    </div>
+  </footer>
+
+  <script>
+    function fillImage(name) {
+      document.getElementById('image_name').value = name;
+    }
+
+    document.getElementById('scanForm').addEventListener('submit', function() {
+      const btn = document.getElementById('scanBtn');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...';
+      btn.style.opacity = '0.8';
+    });
+  </script>
+</body>
+</html>

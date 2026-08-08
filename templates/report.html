@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Scan Report - {{ report.image_name }}</title>
+  
+  <!-- Google Fonts & Font Awesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+  <!-- Navigation Bar -->
+  <nav class="navbar">
+    <div class="container nav-content">
+      <a href="/" class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div class="brand-title">Docker <span>SecScan</span></div>
+      </a>
+      
+      <div class="header-actions">
+        <a href="/" class="btn-secondary">
+          <i class="fa-solid fa-arrow-left"></i> New Scan
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+    
+    <!-- Report Header Banner -->
+    <header class="report-header">
+      <div class="image-title-wrap">
+        <h1>
+          <i class="fa-brands fa-docker" style="color: var(--primary);"></i>
+          {{ report.image_name }}
+        </h1>
+        <div class="image-subtitle">
+          <span>Scanned on {{ report.scan_timestamp }}</span> &bull; 
+          {% if report.summary.is_simulated %}
+            <span style="color: var(--risk-medium);"><i class="fa-solid fa-flask"></i> Offline Demo Data</span>
+          {% else %}
+            <span style="color: var(--risk-low);"><i class="fa-solid fa-bolt"></i> Live Docker Engine Inspection</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <form action="/scan" method="POST" style="display: inline;">
+          <input type="hidden" name="image_name" value="{{ report.image_name }}">
+          <input type="hidden" name="force_pull" value="true">
+          <button type="submit" class="btn-secondary">
+            <i class="fa-solid fa-arrows-rotate"></i> Re-scan (Force Pull)
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <!-- Top Metric Summary Grid -->
+    <section class="summary-grid">
+      
+      <!-- Security Risk Score Card -->
+      <div class="score-card">
+        <div class="score-circle-wrap">
+          <!-- Circular SVG Progress Ring -->
+          <svg width="110" height="110" viewBox="0 0 120 120" style="transform: rotate(-90deg);">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="10"/>
+            <circle 
+              cx="60" 
+              cy="60" 
+              r="50" 
+              fill="none" 
+              stroke="{{ report.risk_assessment.color_code }}" 
+              stroke-width="10" 
+              stroke-dasharray="314.15" 
+              stroke-dashoffset="{{ 314.15 - (314.15 * report.risk_assessment.score / 100) }}"
+              stroke-linecap="round"
+              style="transition: stroke-dashoffset 1s ease-in-out;"
+            />
+          </svg>
+          <div style="position: absolute; text-align: center;">
+            <div class="score-value">{{ report.risk_assessment.score }}</div>
+            <div class="score-label">/ 100</div>
+          </div>
+        </div>
+
+        <div class="risk-info">
+          <div class="risk-level-badge {{ report.risk_assessment.badge_class }}">
+            <i class="fa-solid fa-shield-virus"></i> {{ report.risk_assessment.risk_level }} Risk
+          </div>
+          <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: 0.4rem;">
+            {{ report.risk_assessment.summary_statement }}
+          </p>
+        </div>
+      </div>
+
+      <!-- Image Metadata Overview Card -->
+      <div class="meta-card">
+        <div class="card-heading">
+          <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Image Specifications
+        </div>
+        <div class="meta-grid">
+          <div>
+            <div class="meta-item-label">Image ID</div>
+            <div class="meta-item-val" title="{{ report.metadata.full_id }}"><code>{{ report.metadata.id }}</code></div>
+          </div>
+          <div>
+            <div class="meta-item-label">Image Size</div>
+            <div class="meta-item-val">{{ report.metadata.size_mb }} MB</div>
+          </div>
+          <div>
+            <div class="meta-item-label">Architecture / OS</div>
+            <div class="meta-item-val">{{ report.metadata.os }} / {{ report.metadata.architecture }}</div>
+          </div>
+          <div>
+            <div class="meta-item-label">Created Date</div>
+            <div class="meta-item-val">{{ report.metadata.created }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Score Deductions Breakdown (if any) -->
+    {% if report.risk_assessment.deductions %}
+      <div class="alert alert-warning" style="margin-bottom: 2.5rem;">
+        <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
+        <div>
+          <strong>Score Penalties Applied:</strong> Base score (100) minus 
+          {% for d in report.risk_assessment.deductions %}
+            <code>-{{ d.points }} pts ({{ d.issue }})</code>{% if not loop.last %}, {% endif %}
+          {% endfor %}.
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Detailed Security Checks Grid -->
+    <h2 class="section-title">
+      <i class="fa-solid fa-list-check" style="color: var(--primary);"></i> Security Checks Audit
+    </h2>
+    <div class="checks-grid">
+
+      <!-- Check 1: Root User Execution -->
+      {% set root_check = report.check_results.root_user %}
+      <div class="check-card {% if root_check.is_flagged %}flagged{% else %}passed{% endif %}">
+        <div class="check-header">
+          <div class="check-title">
+            <i class="fa-solid fa-user-shield"></i> {{ root_check.check_name }}
+          </div>
+          {% if root_check.is_flagged %}
+            <span class="badge-flagged"><i class="fa-solid fa-xmark"></i> FLAGGED (ROOT)</span>
+          {% else %}
+            <span class="badge-passed"><i class="fa-solid fa-check"></i> PASSED (NON-ROOT)</span>
+          {% endif %}
+        </div>
+        <div class="check-details">
+          <p><strong>Running as Root:</strong> {% if root_check.is_flagged %}<span style="color: var(--risk-high); font-weight: 700;">YES</span>{% else %}<span style="color: var(--risk-low); font-weight: 700;">NO</span>{% endif %}</p>
+          <p><strong>Configured USER:</strong> <code>{{ root_check.user_value }}</code></p>
+          <p style="margin-top: 0.5rem; font-size: 0.88rem;">{{ root_check.details }}</p>
+        </div>
+      </div>
+
+      <!-- Check 2: Exposed Ports -->
+      {% set ports_check = report.check_results.exposed_ports %}
+      <div class="check-card {% if ports_check.is_flagged %}flagged{% elif ports_check.total_exposed > 0 %}warning{% else %}passed{% endif %}">
+        <div class="check-header">
+          <div class="check-title">
+            <i class="fa-solid fa-network-wired"></i> {{ ports_check.check_name }}
+          </div>
+          {% if ports_check.is_flagged %}
+            <span class="badge-flagged"><i class="fa-solid fa-triangle-exclamation"></i> RISKY PORTS EXPOSED</span>
+          {% elif ports_check.total_exposed > 0 %}
+            <span class="badge-passed" style="background: rgba(56, 189, 248, 0.15); color: var(--primary);">
+              <i class="fa-solid fa-info"></i> {{ ports_check.total_exposed }} PORT(S) EXPOSED
+            </span>
+          {% else %}
+            <span class="badge-passed"><i class="fa-solid fa-check"></i> NO PORTS EXPOSED</span>
+          {% endif %}
+        </div>
+        <div class="check-details">
+          <p>{{ ports_check.details }}</p>
+          {% if ports_check.exposed_ports %}
+            <div style="margin-top: 0.5rem;">
+              <strong>Exposed Ports List:</strong>
+              <ul style="padding-left: 1.2rem; margin-top: 0.25rem;">
+                {% for p in ports_check.exposed_ports %}
+                  <li>
+                    <code>{{ p.raw }}</code> — {{ p.service }} 
+                    {% if p.is_risky %}
+                      <span style="color: var(--risk-high); font-weight: 700;">(Risky Port!)</span>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Check 3: Base Image & Tag Policy -->
+      {% set tag_check = report.check_results.base_image %}
+      <div class="check-card {% if tag_check.is_flagged %}warning{% else %}passed{% endif %}">
+        <div class="check-header">
+          <div class="check-title">
+            <i class="fa-solid fa-tags"></i> {{ tag_check.check_name }}
+          </div>
+          {% if tag_check.is_flagged %}
+            <span class="badge-flagged" style="background: var(--risk-medium-bg); color: var(--risk-medium);">
+              <i class="fa-solid fa-triangle-exclamation"></i> UNPINNED TAG
+            </span>
+          {% else %}
+            <span class="badge-passed"><i class="fa-solid fa-check"></i> TAG PINNED</span>
+          {% endif %}
+        </div>
+        <div class="check-details">
+          <p><strong>Evaluated Tag:</strong> <code>:{{ tag_check.current_tag }}</code></p>
+          <p style="margin-top: 0.4rem;">{{ tag_check.details }}</p>
+        </div>
+      </div>
+
+      <!-- Check 4: Hardcoded Secret Detection -->
+      {% set secrets_check = report.check_results.secrets %}
+      <div class="check-card {% if secrets_check.is_flagged %}flagged{% else %}passed{% endif %}">
+        <div class="check-header">
+          <div class="check-title">
+            <i class="fa-solid fa-key"></i> {{ secrets_check.check_name }}
+          </div>
+          {% if secrets_check.is_flagged %}
+            <span class="badge-flagged"><i class="fa-solid fa-triangle-exclamation"></i> {{ secrets_check.total_detected }} SECRET(S) FOUND</span>
+          {% else %}
+            <span class="badge-passed"><i class="fa-solid fa-check"></i> NO SECRETS DETECTED</span>
+          {% endif %}
+        </div>
+        <div class="check-details">
+          <p>{{ secrets_check.details }}</p>
+          {% if secrets_check.detected_secrets %}
+            <div style="margin-top: 0.5rem;">
+              <strong>Detected Secret Keywords:</strong>
+              <ul style="padding-left: 1.2rem; margin-top: 0.25rem;">
+                {% for s in secrets_check.detected_secrets %}
+                  <li style="margin-bottom: 0.4rem;">
+                    <span style="color: var(--risk-high); font-weight: 600;">[{{ s.secret_type }}]</span> 
+                    in <em>{{ s.source }}</em>: 
+                    <code>{{ s.raw_context }}</code>
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Actionable Security Recommendations Section -->
+    <section class="recommendations-box">
+      <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem;">
+        <i class="fa-solid fa-lightbulb" style="color: #f59e0b;"></i> Actionable Security Recommendations
+      </h2>
+
+      {% for rec in report.recommendations %}
+        <div class="rec-item">
+          <div class="rec-header">
+            {% if rec.priority == 'High' %}
+              <span class="rec-priority" style="background: var(--risk-high-bg); color: var(--risk-high);">High Priority</span>
+            {% elif rec.priority == 'Medium' %}
+              <span class="rec-priority" style="background: var(--risk-medium-bg); color: var(--risk-medium);">Medium Priority</span>
+            {% else %}
+              <span class="rec-priority" style="background: var(--risk-low-bg); color: var(--risk-low);">Info / Pass</span>
+            {% endif %}
+            <h3 class="rec-title">{{ rec.title }}</h3>
+          </div>
+          <p class="rec-desc">{{ rec.description }}</p>
+          
+          {% if rec.fix_example %}
+            <div style="margin-top: 0.5rem;">
+              <span style="font-size: 0.8rem; color: var(--text-dim); text-transform: uppercase; font-weight: 700;">Remediation Example:</span>
+              <div class="code-block">{{ rec.fix_example }}</div>
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>Docker Image Security Scanner &bull; Educational Academic Project &bull; Powered by Flask & Docker SDK</p>
+    </div>
+  </footer>
+</body>
+</html>
